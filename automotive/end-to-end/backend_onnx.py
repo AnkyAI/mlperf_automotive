@@ -1,0 +1,114 @@
+import numpy as np
+
+
+class BackendUniADOnnx:
+    """ONNX Runtime backend for the stateful UniAD 2.0 planning graph."""
+
+    IMAGE_INPUT = "img"
+    PREV_BEV_INPUT = "prev_bev"
+    USE_PREV_BEV_INPUT = "use_prev_bev"
+    PREV_BEV_OUTPUT = "next_bev"
+    PLANNING_OUTPUT = "sdc_traj"
+
+    def __init__(self, model_path, providers=None, session=None):
+        self.model_path = model_path
+        self.providers = providers or [
+            "CUDAExecutionProvider",
+            "CPUExecutionProvider",
+        ]
+        self.session = session
+        self.scene_token = None
+        self.prev_bev = None
+
+    def load(self):
+        if self.session is None:
+            import onnxruntime as ort
+
+            self.session = ort.InferenceSession(
+                self.model_path,
+                providers=self.providers,
+            )
+
+        self.inputs = {value.name: value for value in self.session.get_inputs()}
+        self.outputs = {value.name: value for value in self.session.get_outputs()}
+        required_inputs = {
+            self.IMAGE_INPUT,
+            self.PREV_BEV_INPUT,
+            self.USE_PREV_BEV_INPUT,
+        }
+        required_outputs = {self.PREV_BEV_OUTPUT, self.PLANNING_OUTPUT}
+        missing_inputs = sorted(required_inputs - self.inputs.keys())
+        missing_outputs = sorted(required_outputs - self.outputs.keys())
+        if missing_inputs or missing_outputs:
+            raise ValueError(
+                "UniAD MLPerf requires a stateful ONNX graph; "
+                f"missing inputs={missing_inputs}, missing outputs={missing_outputs}. "
+                "The first-frame-only export is not benchmark compatible."
+            )
+        return self
+
+    @staticmethod
+    def _as_numpy(value):
+        if hasattr(value, "detach"):
+            value = value.detach().cpu().numpy()
+        return np.asarray(value)
+
+    @staticmethod
+    def _metadata(sample):
+        metadata = sample.get("img_metas", [])
+        while isinstance(metadata, (list, tuple)) and len(metadata) == 1:
+            metadata = metadata[0]
+        if not isinstance(metadata, dict):
+            raise ValueError("Each preprocessed sample must contain one img_metas dict")
+        return metadata
+
+    def _zeros_for(self, input_name):
+        value = self.inputs[input_name]
+        if any(not isinstance(dim, int) or dim <= 0 for dim in value.shape):
+            raise ValueError(
+                f"Cannot initialize dynamic state input {input_name}: {value.shape}"
+            )
+        return np.zeros(value.shape, dtype=np.float32)
+
+    def reset(self):
+        self.scene_token = None
+        self.prev_bev = None
+
+    def predict(self, sample):
+        metadata = self._metadata(sample)
+        scene_token = metadata.get("scene_token")
+        if scene_token is None:
+            raise ValueError("img_metas is missing scene_token")
+
+        first_frame = scene_token != self.scene_token
+        if first_frame:
+            self.prev_bev = self._zeros_for(self.PREV_BEV_INPUT)
+
+        feeds = {
+            self.IMAGE_INPUT: self._as_numpy(sample[self.IMAGE_INPUT]),
+            self.PREV_BEV_INPUT: self.prev_bev,
+            self.USE_PREV_BEV_INPUT: np.asarray([not first_frame], dtype=np.bool_),
+        }
+        for name in self.inputs:
+            if name in feeds:
+                continue
+            if name in sample:
+                feeds[name] = self._as_numpy(sample[name])
+            elif name in metadata:
+                feeds[name] = self._as_numpy(metadata[name])
+            else:
+                raise ValueError(f"No value available for ONNX input {name}")
+
+        output_names = list(self.outputs)
+        values = self.session.run(output_names, feeds)
+        result = dict(zip(output_names, values))
+        self.prev_bev = result[self.PREV_BEV_OUTPUT]
+        self.scene_token = scene_token
+
+        return [{
+            "planning": {
+                "result_planning": {
+                    "sdc_traj": result[self.PLANNING_OUTPUT],
+                }
+            }
+        }]

@@ -72,6 +72,24 @@ python main.py \
     --accuracy
 ```
 
+## UniAD 2.0 ONNX backend
+
+The ONNX Runtime backend is selected with `--backend onnx`:
+
+```bash
+python main.py \
+    --backend onnx \
+    --onnx-model <path/to/uniad2_stateful.onnx> \
+    --dataset-path <path/to/preprocessed_uniad> \
+    --log-dir <path/to/store/logs>
+```
+
+The model must expose the temporal inputs and outputs described in
+[`ONNX_MODEL_CONTRACT.md`](ONNX_MODEL_CONTRACT.md). The backend rejects the
+first-frame-only UniAD 2.0 export because it cannot preserve temporal behavior.
+The benchmark already uses LoadGen's grouped QSL configuration to keep each
+nuScenes sequence together.
+
 Run the accuracy checker
 ```
 python accuracy.py \

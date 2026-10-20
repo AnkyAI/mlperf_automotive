@@ -6,8 +6,6 @@ import sys
 import mlperf_loadgen as lg
 
 from dataset import Nuscenes
-from backend_deploy import BackendUniAD
-
 import logging
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("main")
@@ -27,8 +25,18 @@ SCENARIO_MAP = {
 
 def get_args():
     parser = argparse.ArgumentParser(description="UniAD MLPerf Automotive Benchmark")
-    parser.add_argument("--config", help="Path to model config file", required=True)
-    parser.add_argument("--checkpoint", help="Path to checkpoint file", required=True)
+    parser.add_argument("--config", help="Path to model config file")
+    parser.add_argument("--checkpoint", help="Path to checkpoint file")
+    parser.add_argument(
+        "--backend",
+        choices=("pytorch", "onnx"),
+        default="pytorch",
+        help="Inference backend",
+    )
+    parser.add_argument(
+        "--onnx-model",
+        help="Path to the stateful UniAD 2.0 ONNX model",
+    )
     parser.add_argument("--dataset-path", help="Path to NuScenes dataset", required=True)
     parser.add_argument("--length", type=int, default=0, help="Benchmark dataset size")
     parser.add_argument(
@@ -52,8 +60,25 @@ def get_args():
 def main():
     args = get_args()
     
-    print("Initializing UniAD PyTorch Backend...")
-    backend = BackendUniAD(config_path=args.config, checkpoint_path=args.checkpoint)
+    if args.backend == "onnx":
+        if not args.onnx_model:
+            raise ValueError("--onnx-model is required with --backend onnx")
+        from backend_onnx import BackendUniADOnnx
+
+        print("Initializing UniAD ONNX Runtime backend...")
+        backend = BackendUniADOnnx(args.onnx_model).load()
+    else:
+        if not args.config or not args.checkpoint:
+            raise ValueError(
+                "--config and --checkpoint are required with --backend pytorch"
+            )
+        from backend_deploy import BackendUniAD
+
+        print("Initializing UniAD PyTorch backend...")
+        backend = BackendUniAD(
+            config_path=args.config,
+            checkpoint_path=args.checkpoint,
+        )
     
     print("Initializing Nuscenes Dataset/QSL...")
     dataset = Nuscenes(os.path.abspath(args.dataset_path), config=args.config, length=args.length)
