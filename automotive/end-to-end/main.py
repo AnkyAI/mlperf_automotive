@@ -37,6 +37,11 @@ def get_args():
         "--onnx-model",
         help="Path to the stateful UniAD 2.0 ONNX model",
     )
+    parser.add_argument(
+        "--onnx-initial-state",
+        default=None,
+        help="NPZ initial recurrent state emitted by the UniAD 2.0 exporter",
+    )
     parser.add_argument("--dataset-path", help="Path to NuScenes dataset", required=True)
     parser.add_argument("--length", type=int, default=0, help="Benchmark dataset size")
     parser.add_argument(
@@ -66,7 +71,10 @@ def main():
         from backend_onnx import BackendUniADOnnx
 
         print("Initializing UniAD ONNX Runtime backend...")
-        backend = BackendUniADOnnx(args.onnx_model).load()
+        backend = BackendUniADOnnx(
+            args.onnx_model,
+            initial_state_path=args.onnx_initial_state,
+        ).load()
     else:
         if not args.config or not args.checkpoint:
             raise ValueError(

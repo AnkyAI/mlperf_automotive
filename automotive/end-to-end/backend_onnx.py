@@ -16,19 +16,23 @@ class BackendUniADOnnx:
         "max_obj_id": "next_max_obj_id",
         "track_query": "next_track_query",
         "track_ref_pts": "next_track_ref_pts",
+        "track_output_embedding": "next_track_output_embedding",
         "track_obj_idxes": "next_track_obj_idxes",
         "track_matched_gt_idxes": "next_track_matched_gt_idxes",
         "track_disappear_time": "next_track_disappear_time",
         "track_iou": "next_track_iou",
         "track_scores": "next_track_scores",
+        "track_track_scores": "next_track_track_scores",
         "track_pred_boxes": "next_track_pred_boxes",
+        "track_pred_logits": "next_track_pred_logits",
         "track_mem_bank": "next_track_mem_bank",
         "track_mem_padding_mask": "next_track_mem_padding_mask",
         "track_save_period": "next_track_save_period",
     }
 
-    def __init__(self, model_path, providers=None, session=None):
+    def __init__(self, model_path, initial_state_path=None, providers=None, session=None):
         self.model_path = model_path
+        self.initial_state_path = initial_state_path
         self.providers = providers or [
             "CUDAExecutionProvider",
             "CPUExecutionProvider",
@@ -36,6 +40,7 @@ class BackendUniADOnnx:
         self.session = session
         self.scene_token = None
         self.state = {}
+        self.initial_state = {}
 
     def load(self):
         if self.session is None:
@@ -62,6 +67,30 @@ class BackendUniADOnnx:
                 f"missing inputs={missing_inputs}, missing outputs={missing_outputs}. "
                 "The first-frame-only export is not benchmark compatible."
             )
+        if not self.initial_state_path:
+            raise ValueError(
+                "--onnx-initial-state is required for the learned UniAD tracker "
+                "queries and deterministic scene resets"
+            )
+        with np.load(self.initial_state_path) as archive:
+            missing_state = sorted(self.STATE_PAIRS.keys() - archive.files)
+            if missing_state:
+                raise ValueError(
+                    f"Initial-state artifact is missing tensors: {missing_state}"
+                )
+            self.initial_state = {
+                name: np.asarray(archive[name], dtype=self._dtype_for(self.inputs[name]))
+                for name in self.STATE_PAIRS
+            }
+        for name, value in self.initial_state.items():
+            expected = self.inputs[name].shape
+            if len(expected) != value.ndim or any(
+                isinstance(dim, int) and dim > 0 and dim != actual
+                for dim, actual in zip(expected, value.shape)
+            ):
+                raise ValueError(
+                    f"Initial state {name} has shape {value.shape}; expected {expected}"
+                )
         return self
 
     @staticmethod
@@ -90,19 +119,6 @@ class BackendUniADOnnx:
             "tensor(int64)": np.int64,
         }.get(type_name, np.float32)
 
-    def _zeros_for(self, input_name):
-        value = self.inputs[input_name]
-        shape = list(value.shape)
-        if input_name.startswith("track_") and (
-            not isinstance(shape[0], int) or shape[0] <= 0
-        ):
-            shape[0] = self.INITIAL_TRACK_QUERIES
-        if any(not isinstance(dim, int) or dim <= 0 for dim in shape):
-            raise ValueError(
-                f"Cannot initialize dynamic state input {input_name}: {value.shape}"
-            )
-        return np.zeros(shape, dtype=self._dtype_for(value))
-
     def reset(self):
         self.scene_token = None
         self.state = {}
@@ -116,13 +132,16 @@ class BackendUniADOnnx:
         first_frame = scene_token != self.scene_token
         if first_frame:
             self.state = {
-                input_name: self._zeros_for(input_name)
-                for input_name in self.STATE_PAIRS
+                input_name: value.copy()
+                for input_name, value in self.initial_state.items()
             }
 
         feeds = {
             self.IMAGE_INPUT: self._as_numpy(sample[self.IMAGE_INPUT]),
-            self.USE_PREV_BEV_INPUT: np.asarray([not first_frame], dtype=np.bool_),
+            self.USE_PREV_BEV_INPUT: np.asarray(
+                [not first_frame],
+                dtype=self._dtype_for(self.inputs[self.USE_PREV_BEV_INPUT]),
+            ),
             **self.state,
         }
         for name in self.inputs:

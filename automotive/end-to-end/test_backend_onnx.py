@@ -1,4 +1,5 @@
 import unittest
+import tempfile
 
 import numpy as np
 
@@ -51,13 +52,31 @@ def sample(scene_token):
 
 
 class BackendUniADOnnxTest(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.state_path = self.tempdir.name + "/state.npz"
+        state = {}
+        for input_name in BackendUniADOnnx.STATE_PAIRS:
+            shape = (BackendUniADOnnx.INITIAL_TRACK_QUERIES, 2) \
+                if input_name.startswith("track_") else (1,)
+            state[input_name] = np.zeros(shape, dtype=np.float32)
+        state["track_query"].fill(7)
+        np.savez(self.state_path, **state)
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
     def test_rejects_first_frame_only_graph(self):
         with self.assertRaisesRegex(ValueError, "first-frame-only"):
-            BackendUniADOnnx("model.onnx", session=FakeSession(False)).load()
+            BackendUniADOnnx(
+                "model.onnx", self.state_path, session=FakeSession(False)
+            ).load()
 
     def test_carries_state_within_scene_and_resets_between_scenes(self):
         session = FakeSession()
-        backend = BackendUniADOnnx("model.onnx", session=session).load()
+        backend = BackendUniADOnnx(
+            "model.onnx", self.state_path, session=session
+        ).load()
 
         first = backend.predict(sample("scene-a"))
         backend.predict(sample("scene-a"))
@@ -72,6 +91,8 @@ class BackendUniADOnnxTest(unittest.TestCase):
         np.testing.assert_array_equal(session.feeds[1]["prev_bev"], 1)
         np.testing.assert_array_equal(session.feeds[2]["prev_bev"], 0)
         self.assertEqual(session.feeds[0]["track_query"].shape[0], 901)
+        np.testing.assert_array_equal(session.feeds[0]["track_query"], 7)
+        np.testing.assert_array_equal(session.feeds[2]["track_query"], 7)
 
 
 if __name__ == "__main__":
