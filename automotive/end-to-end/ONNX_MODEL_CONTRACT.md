@@ -9,6 +9,12 @@ UniAD uses information from earlier frames.
 - `img`: current six-camera image tensor
 - `prev_bev`: BEV features returned by the previous frame
 - `use_prev_bev`: false for the first frame of a scene, true otherwise
+- `prev_timestamp`, `prev_l2g_r_mat`, and `prev_l2g_t`: prior ego state
+- `max_obj_id`: tracker identifier counter
+- `track_query`, `track_ref_pts`, `track_obj_idxes`
+- `track_matched_gt_idxes`, `track_disappear_time`, `track_iou`, `track_scores`
+- `track_pred_boxes`, `track_mem_bank`, `track_mem_padding_mask`
+- `track_save_period`
 
 Any additional graph inputs, including ego pose and timestamp tensors, must use
 the same names as keys in the preprocessed sample or its `img_metas` dictionary.
@@ -17,12 +23,14 @@ the same names as keys in the preprocessed sample or its `img_metas` dictionary.
 
 - `sdc_traj`: planned ego trajectory
 - `next_bev`: BEV features to feed into the next frame
+- `next_timestamp`, `next_l2g_r_mat`, `next_l2g_t`, and `next_max_obj_id`
+- A `next_` output corresponding to every `track_` input listed above
 
 The backend resets `prev_bev` when `scene_token` changes. LoadGen samples must
 therefore be issued in dataset order for a temporal accuracy run. Performance
 runs need sequence-aware grouping or independent state per active scene; random
 sample ordering with one global state is invalid.
 
-UniAD 2.0 also propagates tracker instances between frames. The final model
-contract must expose every tracker tensor that affects the planning output, or
-the exporter must prove that the selected benchmark path does not consume it.
+The tracker state uses a dynamic first dimension. A new scene starts with 901
+queries; later frames may append active tracks. The state list intentionally
+omits transient tensors that UniAD overwrites before reading on each frame.
