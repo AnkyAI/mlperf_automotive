@@ -15,11 +15,16 @@ state input below. This preserves the checkpoint's learned `track_query` and
 - `use_prev_bev`: false for the first frame of a scene, true otherwise
 - `prev_timestamp`, `prev_l2g_r_mat`, and `prev_l2g_t`: prior ego state
 - `max_obj_id`: tracker identifier counter
-- `track_query`, `track_ref_pts`, `track_output_embedding`, `track_obj_idxes`
-- `track_matched_gt_idxes`, `track_disappear_time`, `track_iou`, `track_scores`
-- `track_track_scores`, `track_pred_boxes`, `track_pred_logits`
+- `track_query`, `track_ref_pts`, `track_obj_idxes`
+- `track_matched_gt_idxes`, `track_disappear_time`, `track_iou`
+- `track_track_scores`, `track_pred_boxes`
 - `track_mem_bank`, `track_mem_padding_mask`
 - `track_save_period`
+
+`output_embedding`, classification `scores`, and `pred_logits` are transient
+per-frame values. UniAD overwrites them before reading the incoming tracker
+state, so the ONNX exporter prunes those inputs and the backend does not carry
+them between frames.
 
 Any additional graph inputs, including ego pose and timestamp tensors, must use
 the same names as keys in the preprocessed sample or its `img_metas` dictionary.
