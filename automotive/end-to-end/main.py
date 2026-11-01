@@ -53,10 +53,16 @@ def get_args():
     parser.add_argument("--log-dir", type=str, default="results", help="Directory to store LoadGen logs")
     parser.add_argument("--accuracy", action="store_true", help="Run benchmark in accuracy mode")
     parser.add_argument(
-        "--audit_conf", default="audit.config", help="config for LoadGen audit settings"
+        "--audit-conf",
+        "--audit_conf",
+        dest="audit_conf",
+        default="audit.config",
+        help="config for LoadGen audit settings",
     )
     parser.add_argument(
+        "--user-conf",
         "--user_conf",
+        dest="user_conf",
         default="user.conf",
         help="user config for user LoadGen settings such as target QPS",
     )
