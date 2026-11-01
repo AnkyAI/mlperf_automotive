@@ -102,6 +102,7 @@ def main():
         
         # Format predictions and send responses back to LoadGen
         responses = []
+        response_arrays = []
         for idx, q in enumerate(query_samples):
             # Execute model inference sequentially (BS=1)
             predictions = backend.predict(batch_data_list[idx])
@@ -110,6 +111,7 @@ def main():
             # OpenMMLab returns a list of results. For BS=1, we take predictions[0]
             prediction_bytes = pickle.dumps(predictions[0])
             response_array = array.array("B", prediction_bytes)
+            response_arrays.append(response_array)
             bi = response_array.buffer_info()
             
             # Record completion with the query id, memory pointer, and length
@@ -129,6 +131,7 @@ def main():
         dataset.unload_query_samples
     )
     user_conf = os.path.abspath(args.user_conf)
+    audit_config = os.path.abspath(args.audit_conf) if args.audit_conf else ""
     if not os.path.exists(user_conf):
         log.error("{} not found".format(user_conf))
         sys.exit(1)
@@ -149,10 +152,9 @@ def main():
     if args.log_dir:
         log_dir = os.path.abspath(args.log_dir)
         os.makedirs(log_dir, exist_ok=True)
-        os.chdir(log_dir)
     
     log_output_settings = lg.LogOutputSettings()
-    log_output_settings.outdir = args.log_dir
+    log_output_settings.outdir = log_dir
     log_output_settings.copy_summary_to_stdout = True
     log_output_settings.copy_detail_to_stdout = False
     
@@ -160,7 +162,6 @@ def main():
     log_settings.log_output = log_output_settings
     log_settings.enable_trace = False
     
-    audit_config = os.path.abspath(args.audit_conf)
     lg.StartTestWithGroupedQSL(sut, qsl, settings, audit_config)
     
     print(f"Benchmark complete. Logs saved to {args.log_dir}/")

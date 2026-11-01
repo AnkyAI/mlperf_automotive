@@ -93,6 +93,24 @@ and is reloaded at each nuScenes scene boundary.
 The benchmark already uses LoadGen's grouped QSL configuration to keep each
 nuScenes sequence together.
 
+Before a full benchmark run, validate the complete LoadGen and ONNX Runtime
+path with the first two frames of one sequence:
+
+```bash
+python main.py \
+    --backend onnx \
+    --onnx-model <path/to/uniad2_stateful.onnx> \
+    --onnx-initial-state <path/to/uniad2_stateful.onnx.state.npz> \
+    --dataset-path <path/to/preprocessed_uniad> \
+    --length 2 \
+    --user-conf user_smoke.conf \
+    --audit-conf "" \
+    --log-dir results/smoke
+```
+
+The smoke configuration treats the two frames as one ordered group so the
+second inference receives the recurrent state produced by the first.
+
 Run the accuracy checker
 ```
 python accuracy.py \
