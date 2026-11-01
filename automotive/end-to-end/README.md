@@ -110,6 +110,11 @@ python main.py \
 
 The smoke configuration treats the two frames as one ordered group so the
 second inference receives the recurrent state produced by the first.
+On the UC Davis cluster, the same check can be submitted with:
+
+```bash
+sbatch scripts/slurm_smoke_onnx.sh
+```
 
 Run the accuracy checker
 ```
