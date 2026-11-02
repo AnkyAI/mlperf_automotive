@@ -7,13 +7,15 @@ class _PreprocessedSampleUnpickler(pickle.Unpickler):
     """Load legacy samples without importing the bundled CUDA training ops."""
 
     def find_class(self, module, name):
-        if (
-            module.startswith("third_party.uniad_mmdet3d.")
-            and name == "LiDARInstance3DBoxes"
-        ):
-            from mmdet3d.core.bbox import LiDARInstance3DBoxes
+        if module.startswith("third_party.uniad_mmdet3d."):
+            if name == "Box3DMode":
+                from mmdet3d.core.bbox import Box3DMode
 
-            return LiDARInstance3DBoxes
+                return Box3DMode
+            if name == "LiDARInstance3DBoxes":
+                from mmdet3d.core.bbox import LiDARInstance3DBoxes
+
+                return LiDARInstance3DBoxes
         return super().find_class(module, name)
 
 class Nuscenes:
