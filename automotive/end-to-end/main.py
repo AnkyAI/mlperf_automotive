@@ -158,6 +158,7 @@ def main():
     if args.log_dir:
         log_dir = os.path.abspath(args.log_dir)
         os.makedirs(log_dir, exist_ok=True)
+        os.chdir(log_dir)
     
     log_output_settings = lg.LogOutputSettings()
     log_output_settings.outdir = log_dir
