@@ -24,7 +24,8 @@ class FakeSession:
                     shape = ["num_queries", 2]
                 else:
                     shape = [1]
-                self.input_values.append(ValueInfo(input_name, shape))
+                type_name = "tensor(double)" if input_name == "prev_timestamp" else "tensor(float)"
+                self.input_values.append(ValueInfo(input_name, shape, type_name))
                 self.output_values.append(ValueInfo(output_name, shape))
         self.feeds = []
 
@@ -91,6 +92,7 @@ class BackendUniADOnnxTest(unittest.TestCase):
         np.testing.assert_array_equal(session.feeds[1]["prev_bev"], 1)
         np.testing.assert_array_equal(session.feeds[2]["prev_bev"], 0)
         self.assertEqual(session.feeds[0]["track_query"].shape[0], 901)
+        self.assertEqual(session.feeds[0]["prev_timestamp"].dtype, np.float64)
         np.testing.assert_array_equal(session.feeds[0]["track_query"], 7)
         np.testing.assert_array_equal(session.feeds[2]["track_query"], 7)
 

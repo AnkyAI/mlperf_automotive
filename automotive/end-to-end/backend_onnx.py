@@ -110,6 +110,7 @@ class BackendUniADOnnx:
         type_name = getattr(value, "type", "tensor(float)")
         return {
             "tensor(bool)": np.bool_,
+            "tensor(double)": np.float64,
             "tensor(float)": np.float32,
             "tensor(float16)": np.float16,
             "tensor(int32)": np.int32,
@@ -150,6 +151,11 @@ class BackendUniADOnnx:
                 feeds[name] = self._as_numpy(metadata[name])
             else:
                 raise ValueError(f"No value available for ONNX input {name}")
+
+        feeds = {
+            name: np.asarray(value, dtype=self._dtype_for(self.inputs[name]))
+            for name, value in feeds.items()
+        }
 
         output_names = list(self.outputs)
         values = self.session.run(output_names, feeds)
