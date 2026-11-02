@@ -10,7 +10,7 @@ set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$HOME/mlperf_automotive}"
 EXPORT_ROOT="${EXPORT_ROOT:-$HOME/uniad-onnx-export}"
-DATASET_PATH="${DATASET_PATH:-/home/rshojaei/large_assets/preprocessed_uniad/preprocess_nuscenes2}"
+DATASET_PATH="${DATASET_PATH:-$EXPORT_ROOT/data/mlperf_uniad2_smoke}"
 MODEL_PATH="${MODEL_PATH:-$EXPORT_ROOT/output/uniad2_stateful.onnx}"
 STATE_PATH="${STATE_PATH:-$EXPORT_ROOT/output/uniad2_stateful.onnx.state.npz}"
 RUN_DIR="$REPO_ROOT/automotive/end-to-end"

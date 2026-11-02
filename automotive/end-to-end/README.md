@@ -96,6 +96,17 @@ nuScenes sequence together.
 Before a full benchmark run, validate the complete LoadGen and ONNX Runtime
 path with the first two frames of one sequence:
 
+Generate two samples with the UniAD 2.0 exporter repository first. The
+preprocessed files published for the UniAD 1.0 tiny benchmark use a different
+image resolution and are not compatible with this graph.
+
+```bash
+python tools/preprocess_uniad_mlperf_onnx.py \
+    projects/configs/stage2_e2e/base_e2e.py \
+    data/mlperf_uniad2_smoke \
+    --length 2
+```
+
 ```bash
 python main.py \
     --backend onnx \
