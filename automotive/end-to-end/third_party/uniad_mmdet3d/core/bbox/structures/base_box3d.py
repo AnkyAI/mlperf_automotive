@@ -3,7 +3,6 @@ import numpy as np
 import torch
 from abc import abstractmethod
 
-from third_party.uniad_mmdet3d.ops.iou3d import iou3d_cuda
 from .utils import limit_period, xywhr2xyxyr
 
 
@@ -402,6 +401,8 @@ class BaseInstance3DBoxes(object):
         Returns:
             torch.Tensor: Calculated iou of boxes' heights.
         """
+        from third_party.uniad_mmdet3d.ops.iou3d import iou3d_cuda
+
         assert isinstance(boxes1, BaseInstance3DBoxes)
         assert isinstance(boxes2, BaseInstance3DBoxes)
         assert type(boxes1) == type(boxes2), (
