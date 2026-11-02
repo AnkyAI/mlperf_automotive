@@ -2,6 +2,20 @@ import os
 import glob
 import pickle
 
+
+class _PreprocessedSampleUnpickler(pickle.Unpickler):
+    """Load legacy samples without importing the bundled CUDA training ops."""
+
+    def find_class(self, module, name):
+        if (
+            module.startswith("third_party.uniad_mmdet3d.")
+            and name == "LiDARInstance3DBoxes"
+        ):
+            from mmdet3d.core.bbox import LiDARInstance3DBoxes
+
+            return LiDARInstance3DBoxes
+        return super().find_class(module, name)
+
 class Nuscenes:
     def __init__(self, dataset_path, config, length):
         # dataset_path now points to the directory containing preprocessed .pkl files
@@ -26,7 +40,7 @@ class Nuscenes:
     def load_item(self, index):
         filepath = os.path.join(self.dataset_path, f"{index}.pkl")
         with open(filepath, 'rb') as f:
-            item = pickle.load(f)
+            item = _PreprocessedSampleUnpickler(f).load()
         return item
 
     def get_samples(self, id_list):
