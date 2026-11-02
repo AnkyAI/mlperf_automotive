@@ -99,6 +99,11 @@ def main():
 
     # ---------- MLPerf SUT Callbacks ---------- #
     def issue_query(query_samples):
+        if args.backend == "onnx":
+            # Grouped QSL delivers one complete temporal sequence per callback.
+            # Repeated performance queries must begin from learned scene state.
+            backend.reset()
+
         # Retrieve the requested indices sent by loadgen
         sample_indices = [q.index for q in query_samples]
         

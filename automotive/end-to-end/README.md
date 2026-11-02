@@ -127,6 +127,13 @@ On the UC Davis cluster, the same check can be submitted with:
 sbatch scripts/slurm_smoke_onnx.sh
 ```
 
+This two-query run validates the complete data, LoadGen, ONNX Runtime, and
+temporal-state path. LoadGen reports its performance result as `INVALID`
+because an official SingleStream result requires thousands of queries for
+statistical early stopping. That status is expected for this short smoke test.
+The Slurm job must still complete with exit code zero and without LoadGen
+errors or runtime exceptions.
+
 Run the accuracy checker
 ```
 python accuracy.py \
