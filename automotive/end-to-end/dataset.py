@@ -1,5 +1,6 @@
 import os
 import glob
+import gzip
 import pickle
 
 
@@ -20,7 +21,7 @@ class _PreprocessedSampleUnpickler(pickle.Unpickler):
 
 class Nuscenes:
     def __init__(self, dataset_path, config, length):
-        # dataset_path now points to the directory containing preprocessed .pkl files
+        # dataset_path points to a directory containing .pkl or .pkl.gz files.
         self.dataset_path = dataset_path
         self.preloaded = {}
         
@@ -28,10 +29,18 @@ class Nuscenes:
         if length > 0:
             self.length = length
         else:
-            self.length = len(glob.glob(os.path.join(self.dataset_path, "*.pkl")))
+            indices = {
+                os.path.basename(path).split(".", 1)[0]
+                for pattern in ("*.pkl", "*.pkl.gz")
+                for path in glob.glob(os.path.join(self.dataset_path, pattern))
+            }
+            self.length = len(indices)
             
         if self.length == 0:
-            print(f"Warning: No preprocessed .pkl files found in {self.dataset_path}!")
+            print(
+                "Warning: No preprocessed .pkl or .pkl.gz files found in "
+                f"{self.dataset_path}!"
+            )
 
     def __len__(self):
         return self.length
@@ -40,8 +49,19 @@ class Nuscenes:
         return self.length
 
     def load_item(self, index):
-        filepath = os.path.join(self.dataset_path, f"{index}.pkl")
-        with open(filepath, 'rb') as f:
+        gzip_path = os.path.join(self.dataset_path, f"{index}.pkl.gz")
+        pickle_path = os.path.join(self.dataset_path, f"{index}.pkl")
+        if os.path.exists(gzip_path):
+            filepath = gzip_path
+            open_sample = gzip.open
+        elif os.path.exists(pickle_path):
+            filepath = pickle_path
+            open_sample = open
+        else:
+            raise FileNotFoundError(
+                f"No preprocessed sample found for index {index} in {self.dataset_path}"
+            )
+        with open_sample(filepath, "rb") as f:
             item = _PreprocessedSampleUnpickler(f).load()
         return item
 

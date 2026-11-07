@@ -104,8 +104,23 @@ image resolution and are not compatible with this graph.
 python tools/preprocess_uniad_mlperf_onnx.py \
     projects/configs/stage2_e2e/base_e2e.py \
     data/mlperf_uniad2_smoke \
-    --length 2
+    --length 2 \
+    --gzip
 ```
+
+For the complete validation set, add `--skip-existing` so preprocessing can be
+resumed after an interrupted run. Gzip compression is lossless and reduces the
+tested dataset estimate from about 599 GiB to 159 GiB:
+
+```bash
+python tools/preprocess_uniad_mlperf_onnx.py \
+    projects/configs/stage2_e2e/base_e2e.py \
+    data/mlperf_uniad2 \
+    --gzip \
+    --skip-existing
+```
+
+The benchmark dataset loader accepts both `.pkl` and `.pkl.gz` samples.
 
 ```bash
 python main.py \
