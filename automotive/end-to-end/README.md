@@ -121,6 +121,12 @@ python tools/preprocess_uniad_mlperf_onnx.py \
 ```
 
 The benchmark dataset loader accepts both `.pkl` and `.pkl.gz` samples.
+On the UC Davis cluster, the complete resumable preprocessing job can be
+submitted from the exporter repository with:
+
+```bash
+sbatch scripts/slurm_preprocess_mlperf_onnx.sh
+```
 
 ```bash
 python main.py \
