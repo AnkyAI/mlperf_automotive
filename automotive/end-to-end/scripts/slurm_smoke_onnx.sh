@@ -21,8 +21,8 @@ cd "$RUN_DIR"
 
 test -f "$MODEL_PATH"
 test -f "$STATE_PATH"
-test -f "$DATASET_PATH/0.pkl"
-test -f "$DATASET_PATH/1.pkl"
+test -f "$DATASET_PATH/0.pkl" || test -f "$DATASET_PATH/0.pkl.gz"
+test -f "$DATASET_PATH/1.pkl" || test -f "$DATASET_PATH/1.pkl.gz"
 
 python -u main.py \
   --backend onnx \

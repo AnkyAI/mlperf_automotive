@@ -56,6 +56,30 @@ def to_tensor(obj):
         return {k: to_tensor(v) for k, v in obj.items()}
     return obj
 
+
+def prepare_ground_truth(sample):
+    sdc_planning = to_tensor(sample["sdc_planning"])
+    sdc_planning_mask = to_tensor(sample["sdc_planning_mask"])
+    segmentation = to_tensor(sample["gt_segmentation"])
+
+    if tuple(sdc_planning.shape) != (1, 1, 6, 3):
+        raise ValueError(f"Unexpected sdc_planning shape: {tuple(sdc_planning.shape)}")
+    if tuple(sdc_planning_mask.shape) != (1, 1, 6, 2):
+        raise ValueError(
+            "Unexpected sdc_planning_mask shape: "
+            f"{tuple(sdc_planning_mask.shape)}"
+        )
+    if tuple(segmentation.shape) != (1, 7, 200, 200):
+        raise ValueError(
+            f"Unexpected gt_segmentation shape: {tuple(segmentation.shape)}"
+        )
+
+    return (
+        sdc_planning[0, :, :6, :2],
+        sdc_planning_mask[0, :, :6, :2],
+        segmentation[:, 1:7],
+    )
+
 def main():
     args = get_args()
     ground_truth_path = args.ground_truth_path or args.dataset_path
@@ -87,6 +111,8 @@ def main():
     print(" UniAD Planning Accuracy Results")
     print("="*50)
 
+    failures = []
+    evaluated = 0
     for qsl_idx in ordered_keys:
         prediction = unwrap(raw_outputs_dict[qsl_idx])
         
@@ -102,29 +128,26 @@ def main():
             pred_sdc_traj = to_tensor(res_plan['sdc_traj'])
             
             # 3. Extract Ground Truth directly from the dataset item
-            sdc_planning = to_tensor(gt_data['sdc_planning'])
-            sdc_planning_mask = to_tensor(gt_data['sdc_planning_mask'])
-            
-
-            if 'segmentation' in gt_data:
-                segmentation = to_tensor(gt_data['segmentation'])
-            elif 'gt_segmentation' in gt_data:
-                segmentation = to_tensor(gt_data['gt_segmentation'])
-            else:
-                plan_gt = prediction['planning']['planning_gt']
-                segmentation = to_tensor(plan_gt['segmentation'])
+            gt_sliced, mask_sliced, seg_sliced = prepare_ground_truth(gt_data)
             
             # Apply the exact shape slices from the test.py script
             pred_sliced = pred_sdc_traj[:, :6, :2]
-            gt_sliced = sdc_planning[0][0, :, :6, :2]
-            mask_sliced = sdc_planning_mask[0][0, :, :6, :2]
-            seg_sliced = segmentation[0][:, [1,2,3,4,5,6]]
-            
             planning_metrics(pred_sliced, gt_sliced, mask_sliced, seg_sliced)
+            evaluated += 1
             
         except Exception as e:
             print(f"Warning: Failed to process QSL Index {qsl_idx}. Error: {e}")
-            continue
+            failures.append((qsl_idx, str(e)))
+
+    if failures:
+        raise RuntimeError(
+            f"Accuracy evaluation failed for {len(failures)} of "
+            f"{len(ordered_keys)} samples"
+        )
+    if evaluated != len(ordered_keys):
+        raise RuntimeError(
+            f"Evaluated {evaluated} of {len(ordered_keys)} accuracy samples"
+        )
             
     # Compute and print the finalized metrics
     try:
