@@ -1,4 +1,5 @@
 import argparse
+import gzip
 import json
 import pickle
 import numpy as np
@@ -12,7 +13,27 @@ def get_args():
     parser = argparse.ArgumentParser(description="UniAD Accuracy Checker (Planning Metric)")
     parser.add_argument("--log-file", type=str, default="results/mlperf_log_accuracy.json", help="Path to MLPerf accuracy log")
     parser.add_argument("--dataset-path", help="Path to preprocessed NuScenes dataset (.pkl files)", required=True)
+    parser.add_argument(
+        "--ground-truth-path",
+        default=None,
+        help="Optional directory containing compressed planning ground-truth sidecars",
+    )
     return parser.parse_args()
+
+
+def load_sample(root, index):
+    gzip_path = os.path.join(root, f"{index}.pkl.gz")
+    pickle_path = os.path.join(root, f"{index}.pkl")
+    if os.path.exists(gzip_path):
+        path = gzip_path
+        open_sample = gzip.open
+    elif os.path.exists(pickle_path):
+        path = pickle_path
+        open_sample = open
+    else:
+        raise FileNotFoundError(f"No sample {index} found in {root}")
+    with open_sample(path, "rb") as handle:
+        return pickle.load(handle)
 
 def unwrap(obj):
     if isinstance(obj, dict):
@@ -37,6 +58,7 @@ def to_tensor(obj):
 
 def main():
     args = get_args()
+    ground_truth_path = args.ground_truth_path or args.dataset_path
     
     print(f"Parsing accuracy log: {args.log_file}")
     try:
@@ -73,9 +95,7 @@ def main():
             
         try:
             # 1. Load Ground Truth data from the preprocessed offline dataset
-            filepath = os.path.join(args.dataset_path, f"{qsl_idx}.pkl")
-            with open(filepath, 'rb') as f:
-                gt_data = pickle.load(f)
+            gt_data = load_sample(ground_truth_path, qsl_idx)
             
             # 2. Extract Model predictions
             res_plan = prediction['planning']['result_planning']
