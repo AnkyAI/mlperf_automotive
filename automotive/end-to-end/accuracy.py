@@ -4,10 +4,36 @@ import json
 import pickle
 import numpy as np
 import os
-import torch
-import torch.nn.functional as F
 
-from projects.mmdet3d_plugin.uniad.dense_heads.planning_head_plugin import PlanningMetric
+
+class PlanningL2Metric:
+    """Accumulate UniAD's masked per-timestep planning L2 metric."""
+
+    def __init__(self, n_future=6):
+        self.l2 = np.zeros(n_future, dtype=np.float64)
+        self.total = 0
+
+    def update(self, trajectories, ground_truth, ground_truth_mask):
+        if trajectories.shape != ground_truth.shape:
+            raise ValueError(
+                f"Trajectory shape mismatch: {tuple(trajectories.shape)} != "
+                f"{tuple(ground_truth.shape)}"
+            )
+        if ground_truth_mask.shape != ground_truth.shape:
+            raise ValueError(
+                f"Mask shape mismatch: {tuple(ground_truth_mask.shape)} != "
+                f"{tuple(ground_truth.shape)}"
+            )
+        values = np.sqrt(
+            (((trajectories - ground_truth) ** 2) * ground_truth_mask).sum(axis=-1)
+        )
+        self.l2 += values.astype(np.float64).sum(axis=0)
+        self.total += len(trajectories)
+
+    def compute(self):
+        if self.total == 0:
+            raise RuntimeError("No planning samples were evaluated")
+        return self.l2 / self.total
 
 def get_args():
     parser = argparse.ArgumentParser(description="UniAD Accuracy Checker (Planning Metric)")
@@ -44,23 +70,18 @@ def unwrap(obj):
         return tuple(unwrap(x) for x in obj)
     return obj
 
-def to_tensor(obj):
-    """Recursively converts structures to CPU PyTorch tensors for native torchmetrics."""
-    if isinstance(obj, torch.Tensor):
-        return obj.detach().cpu()
-    elif isinstance(obj, np.ndarray):
-        return torch.from_numpy(obj).cpu()
-    elif isinstance(obj, (list, tuple)):
-        return [to_tensor(x) for x in obj]
-    elif isinstance(obj, dict):
-        return {k: to_tensor(v) for k, v in obj.items()}
-    return obj
+def to_array(obj):
+    if isinstance(obj, np.ndarray):
+        return obj
+    if hasattr(obj, "detach"):
+        return obj.detach().cpu().numpy()
+    return np.asarray(obj)
 
 
 def prepare_ground_truth(sample):
-    sdc_planning = to_tensor(sample["sdc_planning"])
-    sdc_planning_mask = to_tensor(sample["sdc_planning_mask"])
-    segmentation = to_tensor(sample["gt_segmentation"])
+    sdc_planning = to_array(sample["sdc_planning"])
+    sdc_planning_mask = to_array(sample["sdc_planning_mask"])
+    segmentation = to_array(sample["gt_segmentation"])
 
     if tuple(sdc_planning.shape) != (1, 1, 6, 3):
         raise ValueError(f"Unexpected sdc_planning shape: {tuple(sdc_planning.shape)}")
@@ -101,11 +122,7 @@ def main():
         
     ordered_keys = sorted(raw_outputs_dict.keys())
     
-    planning_metrics = PlanningMetric(conf={
-        'xbound': [-12.5, 12.5, 0.5],
-        'ybound': [-12.5, 12.5, 0.5],
-        'zbound': [-10.0, 10.0, 20.0],
-    })
+    planning_metric = PlanningL2Metric()
 
     print("\n" + "="*50)
     print(" UniAD Planning Accuracy Results")
@@ -125,14 +142,14 @@ def main():
             
             # 2. Extract Model predictions
             res_plan = prediction['planning']['result_planning']
-            pred_sdc_traj = to_tensor(res_plan['sdc_traj'])
+            pred_sdc_traj = to_array(res_plan['sdc_traj'])
             
             # 3. Extract Ground Truth directly from the dataset item
-            gt_sliced, mask_sliced, seg_sliced = prepare_ground_truth(gt_data)
+            gt_sliced, mask_sliced, _ = prepare_ground_truth(gt_data)
             
             # Apply the exact shape slices from the test.py script
             pred_sliced = pred_sdc_traj[:, :6, :2]
-            planning_metrics(pred_sliced, gt_sliced, mask_sliced, seg_sliced)
+            planning_metric.update(pred_sliced, gt_sliced, mask_sliced)
             evaluated += 1
             
         except Exception as e:
@@ -149,34 +166,16 @@ def main():
             f"Evaluated {evaluated} of {len(ordered_keys)} accuracy samples"
         )
             
-    # Compute and print the finalized metrics
-    try:
-        planning_results = planning_metrics.compute()
-        
-        if 'L2' in planning_results:
-            l2_val = planning_results['L2']
-            if isinstance(l2_val, torch.Tensor):
-                l2_list = l2_val.tolist()
-            else:
-                l2_list = list(l2_val)
-                
-            avg_l2 = sum(l2_list) / len(l2_list)
-            
-            # Generate time labels (0.5s, 1.0s, ...)
-            time_labels = [f"{(i+1)*0.5:.1f}s" for i in range(len(l2_list))]
-            
-            # Format output table
-            header = "        " + "".join(f"{label:>8}" for label in time_labels)
-            row = " L2:    " + "".join(f"{val:>8.4f}" for val in l2_list)
-            
-            print(header)
-            print(row)
-            print(f"Avg: {avg_l2}")
-        else:
-            print(" L2 metric not found in results.")
-            
-    except Exception as e:
-        print(f"Error computing final metrics: {e}")
+    l2_list = planning_metric.compute().tolist()
+    avg_l2 = sum(l2_list) / len(l2_list)
+
+    time_labels = [f"{(i+1)*0.5:.1f}s" for i in range(len(l2_list))]
+    header = "        " + "".join(f"{label:>8}" for label in time_labels)
+    row = " L2:    " + "".join(f"{val:>8.4f}" for val in l2_list)
+
+    print(header)
+    print(row)
+    print(f"Avg: {avg_l2}")
 
 if __name__ == "__main__":
     main()
