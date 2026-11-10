@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 
 
@@ -43,8 +45,14 @@ class BackendUniADOnnx:
         if self.session is None:
             import onnxruntime as ort
 
+            options = ort.SessionOptions()
+            options.intra_op_num_threads = int(
+                os.environ.get("SLURM_CPUS_PER_TASK", "1")
+            )
+            options.inter_op_num_threads = 1
             self.session = ort.InferenceSession(
                 self.model_path,
+                sess_options=options,
                 providers=self.providers,
             )
 
